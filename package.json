@@ -1,0 +1,22 @@
+{
+  "name": "yuque-lakebook-importer",
+  "version": "1.0.1",
+  "description": "Import Yuque Lakebook into Obsidian",
+  "main": "index.js",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --platform=node --external:obsidian --outfile=main.js",
+    "test": "node tests/core.cjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "esbuild": "^0.28.2",
+    "jsdom": "^29.1.1",
+    "tar-stream": "^3.2.2",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2",
+    "yaml": "^2.9.1"
+  },
+  "private": true
+}

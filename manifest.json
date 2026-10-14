@@ -1,0 +1,9 @@
+{
+  "id": "yuque-lakebook-importer",
+  "name": "语雀 Lakebook 导入",
+  "version": "1.0.1",
+  "minAppVersion": "1.5.0",
+  "description": "本地导入语雀 Lakebook 为 Markdown，保留目录、下载图片、保存原始数据。",
+  "author": "Personal",
+  "isDesktopOnly": true
+}

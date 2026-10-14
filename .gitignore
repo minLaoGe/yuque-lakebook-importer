@@ -1,0 +1,4 @@
+node_modules/
+*.lakebook
+*.lakbook
+.DS_Store
