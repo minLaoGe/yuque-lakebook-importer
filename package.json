@@ -1,6 +1,6 @@
 {
   "name": "yuque-lakebook-importer",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Import Yuque Lakebook into Obsidian",
   "main": "index.js",
   "scripts": {
