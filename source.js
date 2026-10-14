@@ -1,5 +1,5 @@
 const {Plugin,Modal,Setting,Notice,requestUrl}=require('obsidian');
-const tar=require('tar-stream'),zlib=require('zlib'),TD=require('turndown'),{gfm}=require('turndown-plugin-gfm'),YAML=require('yaml'),crypto=require('crypto');
+const tar=require('tar-stream'),zlib=require('zlib'),TD=require('turndown'),{gfm}=require('turndown-plugin-gfm'),YAML=require('yaml');
 const safe=s=>String(s||'未命名').replace(/[\\/:*?"<>|\x00-\x1f]/g,'_').replace(/^\.+$/,'_').slice(0,100);
 async function unpack(buffer){
  if(buffer[0]===31&&buffer[1]===139)buffer=zlib.gunzipSync(buffer,{maxOutputLength:512*1024*1024});
@@ -23,20 +23,24 @@ module.exports=class extends Plugin{
  async importFile(file,download,status){
  const files=await unpack(Buffer.from(await file.arrayBuffer()));const metaEntry=[...files].find(([k])=>k.split('/').pop()==='$meta.json');if(!metaEntry)throw Error('找不到 $meta.json，请选择语雀知识库导出包');let meta=JSON.parse(metaEntry[1].toString()).meta;if(typeof meta==='string')meta=JSON.parse(meta);if(!meta||!Array.isArray(meta.docs))throw Error('不支持的 metadata 结构');
  const docs=meta.docs;let toc=[];try{toc=YAML.parse(meta.book?.tocYml||'')||[]}catch{}const nodes=new Map(toc.map(n=>[n.uuid,n]));
- const root='语雀导入/'+safe(file.name.replace(/\.lake?book$/,''))+'-'+Date.now();const vault=this.app.vault;
+ const vault=this.app.vault;const base='语雀导入/'+safe(file.name.replace(/\.(?:lakebook|lakbook)$/,''));let root=base,rootNumber=2;while(vault.getAbstractFileByPath(root))root=base+' ('+rootNumber+++')';
  const mkdir=async p=>{let acc='';for(const part of p.split('/')){acc=acc?acc+'/'+part:part;if(!vault.getAbstractFileByPath(acc))await vault.createFolder(acc)}};await mkdir(root+'/attachments');await mkdir(root+'/原始数据');
  let warnings=[],paths=new Map(),index=[];const prefix=metaEntry[0].slice(0,-'$meta.json'.length);
- for(const d of docs){const n=toc.find(n=>n.url===d.slug);let ancestors=[],seen=new Set();let cur=n;while(cur?.parent_uuid){if(seen.has(cur.parent_uuid)){warnings.push('目录存在循环：'+d.title);break}seen.add(cur.parent_uuid);cur=nodes.get(cur.parent_uuid);if(cur)ancestors.unshift(safe(cur.title)+'-'+safe(cur.uuid))}paths.set(d.slug,root+'/'+ancestors.concat(safe(d.title)+'-'+safe(d.slug)+'.md').join('/'))}
+ const used=new Set(['目录.md','导入报告.md','attachments','原始数据']);
+ const allocate=(parent,name,ext='')=>{let path=parent+'/'+safe(name)+ext,n=2;while(used.has(path.toLowerCase()))path=parent+'/'+safe(name)+' ('+n+++')'+ext;used.add(path.toLowerCase());return path};
+ const folders=new Map();const folderFor=(id,chain=new Set())=>{if(!id)return root;if(folders.has(id))return folders.get(id);if(chain.has(id)){warnings.push('目录循环，已移到根目录');return root}chain.add(id);const n=nodes.get(id);if(!n)return root;const path=allocate(folderFor(n.parent_uuid,chain),n.title);folders.set(id,path);return path};
+ used.add((root+'/目录.md').toLowerCase());used.add((root+'/导入报告.md').toLowerCase());used.add((root+'/attachments').toLowerCase());used.add((root+'/原始数据').toLowerCase());
+ for(const d of docs){const n=toc.find(n=>n.url===d.slug);paths.set(d.slug,allocate(folderFor(n?.parent_uuid),d.title,'.md'))}
  const cache=new Map();let i=0;
  for(const info of docs){status(`正在导入 ${++i}/${docs.length}：${info.title}`);try{
- const bytes=files.get(prefix+info.slug+'.json');if(!bytes)throw Error('缺少文档 JSON');const obj=JSON.parse(bytes.toString());const d=obj.doc||obj;await vault.create(root+'/原始数据/'+safe(info.slug)+'.json',bytes.toString());
+ const bytes=files.get(prefix+info.slug+'.json');if(!bytes)throw Error('缺少文档 JSON');const obj=JSON.parse(bytes.toString());const d=obj.doc||obj;await vault.create(allocate(root+'/原始数据',info.title,'.json'),bytes.toString());
  let text=d.body||d.body_draft||'';
  if(d.body_html||d.body_lake||d.format==='lake'){
  const {dom,td}=convert(d.body_html||d.body_lake||d.body||d.body_draft||'',warnings);
  for(const img of dom.querySelectorAll('img')){const src=img.getAttribute('src');if(!src)continue;try{
  let dest=cache.get(src);if(!dest){let bytes=files.get(src)||files.get(prefix+src);let ext=src.split('?')[0].match(/\.(png|jpg|jpeg|gif|webp|svg)$/i)?.[0];
  if(!bytes&&download&&src.startsWith('https://')){const r=await requestUrl({url:src,throw:false});if(r.status!==200)throw Error('HTTP '+r.status);const type=r.headers['content-type']||'';if(!type.startsWith('image/'))throw Error('不是图片');bytes=Buffer.from(r.arrayBuffer);ext=ext||({'image/png':'.png','image/jpeg':'.jpg','image/webp':'.webp','image/gif':'.gif','image/svg+xml':'.svg'}[type.split(';')[0]]||'.png')}
- if(!bytes)continue;if(bytes.length>100*1024*1024)throw Error('图片超过100MB');dest=root+'/attachments/'+crypto.createHash('sha256').update(src).digest('hex').slice(0,24)+(ext||'.bin');await vault.createBinary(dest,bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));cache.set(src,dest)}img.setAttribute('src',encodeURI(dest));
+ if(!bytes)continue;if(bytes.length>100*1024*1024)throw Error('图片超过100MB');dest=allocate(root+'/attachments','图片'+String(cache.size+1).padStart(3,'0'),ext||'.bin');await vault.createBinary(dest,bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));cache.set(src,dest)}img.setAttribute('src',encodeURI(dest));
  }catch(e){warnings.push(info.title+' 图片失败：'+src+' '+e.message)}}
  for(const a of dom.querySelectorAll('a[href]')){const href=a.getAttribute('href');const slug=href.split('#')[0].split('/').pop();if(paths.has(slug))a.setAttribute('href',encodeURI(paths.get(slug)))}text=td.turndown(dom.body.innerHTML);
  }

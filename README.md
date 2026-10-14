@@ -1,4 +1,4 @@
-# Obsidian 语雀 Lakebook 导入插件
+# Yuque Lakebook Importer
 
 将语雀导出的 `.lakebook` 知识库转换成 Obsidian Markdown 笔记。无需语雀 API Token 或 MCP，解析在本机完成。
 
@@ -15,7 +15,7 @@
 1. 在语雀导出知识库为 `.lakebook`。
 2. 在 Obsidian 按 `Cmd/Ctrl+P`，运行「导入语雀 .lakebook」。
 3. 选择文件，按需开启「下载远程图片」，点击开始导入。
-4. 查看 `语雀导入/包名-时间戳/` 中的笔记、目录及导入报告。
+4. 查看 `语雀导入/包名/` 中的笔记、目录及导入报告。
 
 每次导入创建新目录，不覆盖已有笔记。原始文档 JSON 保存在「原始数据」目录，以便后续恢复特殊内容。通过 Obsidian Vault API 创建文件，可让已启用的同步插件接收变更；同步成功仍取决于对应插件和账户配置。
 
@@ -59,3 +59,13 @@ npm test
 ## 许可
 
 MIT
+
+## 1.1.0 — Readable names
+
+Imported notes and folders use their titles. Duplicate names receive numbered suffixes, such as `Title (2)`. Repeated imports create `Book (2)` instead of timestamped folders. Images use sequential names; Yuque slugs remain in frontmatter.
+
+### Installation
+Download `main.js` and `manifest.json` from the latest release. Place them in `.obsidian/plugins/yuque-lakebook-importer/`, restart Obsidian, and enable the plugin.
+
+### Usage
+Run “导入语雀 .lakebook” in the command palette, select an exported archive, and start importing. Check the import report for unsupported content. Desktop only.

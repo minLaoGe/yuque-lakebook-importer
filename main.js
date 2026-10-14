@@ -27184,14 +27184,13 @@ var require_dist = __commonJS({
   }
 });
 
-// main.js
+// src/main.js
 var { Plugin, Modal, Setting, Notice, requestUrl } = require("obsidian");
 var tar = require_tar_stream();
 var zlib = require("zlib");
 var TD = require_turndown_cjs();
 var { gfm } = require_turndown_plugin_gfm_cjs();
 var YAML = require_dist();
-var crypto = require("crypto");
 var safe = (s) => String(s || "\u672A\u547D\u540D").replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").replace(/^\.+$/, "_").slice(0, 100);
 async function unpack(buffer) {
   if (buffer[0] === 31 && buffer[1] === 139) buffer = zlib.gunzipSync(buffer, { maxOutputLength: 512 * 1024 * 1024 });
@@ -27302,8 +27301,10 @@ module.exports = class extends Plugin {
     } catch {
     }
     const nodes = new Map(toc.map((n) => [n.uuid, n]));
-    const root = "\u8BED\u96C0\u5BFC\u5165/" + safe(file.name.replace(/\.lake?book$/, "")) + "-" + Date.now();
     const vault = this.app.vault;
+    const base = "\u8BED\u96C0\u5BFC\u5165/" + safe(file.name.replace(/\.(?:lakebook|lakbook)$/, ""));
+    let root = base, rootNumber = 2;
+    while (vault.getAbstractFileByPath(root)) root = base + " (" + rootNumber++ + ")";
     const mkdir = async (p) => {
       let acc = "";
       for (const part of p.split("/")) {
@@ -27315,20 +27316,35 @@ module.exports = class extends Plugin {
     await mkdir(root + "/\u539F\u59CB\u6570\u636E");
     let warnings = [], paths = /* @__PURE__ */ new Map(), index = [];
     const prefix = metaEntry[0].slice(0, -"$meta.json".length);
+    const used = /* @__PURE__ */ new Set(["\u76EE\u5F55.md", "\u5BFC\u5165\u62A5\u544A.md", "attachments", "\u539F\u59CB\u6570\u636E"]);
+    const allocate = (parent, name, ext = "") => {
+      let path = parent + "/" + safe(name) + ext, n = 2;
+      while (used.has(path.toLowerCase())) path = parent + "/" + safe(name) + " (" + n++ + ")" + ext;
+      used.add(path.toLowerCase());
+      return path;
+    };
+    const folders = /* @__PURE__ */ new Map();
+    const folderFor = (id, chain = /* @__PURE__ */ new Set()) => {
+      if (!id) return root;
+      if (folders.has(id)) return folders.get(id);
+      if (chain.has(id)) {
+        warnings.push("\u76EE\u5F55\u5FAA\u73AF\uFF0C\u5DF2\u79FB\u5230\u6839\u76EE\u5F55");
+        return root;
+      }
+      chain.add(id);
+      const n = nodes.get(id);
+      if (!n) return root;
+      const path = allocate(folderFor(n.parent_uuid, chain), n.title);
+      folders.set(id, path);
+      return path;
+    };
+    used.add((root + "/\u76EE\u5F55.md").toLowerCase());
+    used.add((root + "/\u5BFC\u5165\u62A5\u544A.md").toLowerCase());
+    used.add((root + "/attachments").toLowerCase());
+    used.add((root + "/\u539F\u59CB\u6570\u636E").toLowerCase());
     for (const d of docs) {
       const n = toc.find((n2) => n2.url === d.slug);
-      let ancestors = [], seen = /* @__PURE__ */ new Set();
-      let cur = n;
-      while (cur?.parent_uuid) {
-        if (seen.has(cur.parent_uuid)) {
-          warnings.push("\u76EE\u5F55\u5B58\u5728\u5FAA\u73AF\uFF1A" + d.title);
-          break;
-        }
-        seen.add(cur.parent_uuid);
-        cur = nodes.get(cur.parent_uuid);
-        if (cur) ancestors.unshift(safe(cur.title) + "-" + safe(cur.uuid));
-      }
-      paths.set(d.slug, root + "/" + ancestors.concat(safe(d.title) + "-" + safe(d.slug) + ".md").join("/"));
+      paths.set(d.slug, allocate(folderFor(n?.parent_uuid), d.title, ".md"));
     }
     const cache = /* @__PURE__ */ new Map();
     let i = 0;
@@ -27339,7 +27355,7 @@ module.exports = class extends Plugin {
         if (!bytes) throw Error("\u7F3A\u5C11\u6587\u6863 JSON");
         const obj = JSON.parse(bytes.toString());
         const d = obj.doc || obj;
-        await vault.create(root + "/\u539F\u59CB\u6570\u636E/" + safe(info.slug) + ".json", bytes.toString());
+        await vault.create(allocate(root + "/\u539F\u59CB\u6570\u636E", info.title, ".json"), bytes.toString());
         let text = d.body || d.body_draft || "";
         if (d.body_html || d.body_lake || d.format === "lake") {
           const { dom, td } = convert(d.body_html || d.body_lake || d.body || d.body_draft || "", warnings);
@@ -27361,7 +27377,7 @@ module.exports = class extends Plugin {
                 }
                 if (!bytes2) continue;
                 if (bytes2.length > 100 * 1024 * 1024) throw Error("\u56FE\u7247\u8D85\u8FC7100MB");
-                dest = root + "/attachments/" + crypto.createHash("sha256").update(src).digest("hex").slice(0, 24) + (ext || ".bin");
+                dest = allocate(root + "/attachments", "\u56FE\u7247" + String(cache.size + 1).padStart(3, "0"), ext || ".bin");
                 await vault.createBinary(dest, bytes2.buffer.slice(bytes2.byteOffset, bytes2.byteOffset + bytes2.byteLength));
                 cache.set(src, dest);
               }

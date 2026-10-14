@@ -1,11 +1,11 @@
 {
   "name": "yuque-lakebook-importer",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Import Yuque Lakebook into Obsidian",
   "main": "index.js",
   "scripts": {
     "build": "esbuild src/main.js --bundle --platform=node --external:obsidian --outfile=main.js",
-    "test": "node tests/core.cjs"
+    "test": "node tests/core.cjs && node tests/naming.cjs"
   },
   "keywords": [],
   "author": "",
